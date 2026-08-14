@@ -3,7 +3,7 @@
 __version__ = "0.1.0"
 __author__ = "Aryan Agarwal"
 
-from .schemas.core import (
+from schemas.core import (
     SimulationState, Country, Leader, PoliticalEvent, Conflict,
     Alliance, Treaty, Sanction, EconomicIndicator, TradeFlow,
     MigrationFlow, DemographicProfile, RegimeType, ConflictType,

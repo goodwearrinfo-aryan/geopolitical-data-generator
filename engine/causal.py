@@ -38,96 +38,96 @@ class CausalEngine:
     def _build_default_causal_graph(self) -> None:
         """Build default causal relationships."""
         # Coup effects
-        self.add_link("coup", "stability_index", -0.3, 0, desc="Coup reduces stability")
-        self.add_link("coup", "gdp_growth_rate", -0.05, 1, desc="Coup reduces growth")
+        self.add_link("coup", "stability_index", -0.3, 0, description="Coup reduces stability")
+        self.add_link("coup", "gdp_growth_rate", -0.05, 1, description="Coup reduces growth")
         self.add_link("coup", "regime_type", 1.0, 0, 
-                      condition=lambda s, c: True, desc="Successful coup changes regime")
-        self.add_link("coup", "sanctions_on", 0.5, 1, desc="Coups trigger sanctions")
-        self.add_link("coup", "military_expenditure_usd", 0.2, 1, desc="Coup increases military spending")
+                      condition=lambda s, c: True, description="Successful coup changes regime")
+        self.add_link("coup", "sanctions_on", 0.5, 1, description="Coups trigger sanctions")
+        self.add_link("coup", "military_expenditure_usd", 0.2, 1, description="Coup increases military spending")
         
         # Protest effects
-        self.add_link("protest", "stability_index", -0.05, 0, desc="Protests reduce stability")
-        self.add_link("protest", "legitimacy", -0.02, 0, desc="Protests reduce legitimacy")
-        self.add_link("protest", "policy_shift", 0.1, 2, desc="Protests may cause policy shifts")
+        self.add_link("protest", "stability_index", -0.05, 0, description="Protests reduce stability")
+        self.add_link("protest", "legitimacy", -0.02, 0, description="Protests reduce legitimacy")
+        self.add_link("protest", "policy_shift", 0.1, 2, description="Protests may cause policy shifts")
         self.add_link("protest", "regime_change", 0.01, 4, 
-                      condition=lambda s, c: c.stability_index < 0.3, desc="Large protests may topple regime")
+                      condition=lambda s, c: c.stability_index < 0.3, description="Large protests may topple regime")
         
         # Election effects
-        self.add_link("election", "stability_index", 0.02, 0, desc="Elections slightly stabilize democracies")
-        self.add_link("election", "legitimacy", 0.05, 0, desc="Elections boost legitimacy")
-        self.add_link("election", "leader_change", 0.3, 0, desc="Elections may change leaders")
-        self.add_link("election", "policy_shift", 0.2, 1, desc="New governments shift policy")
+        self.add_link("election", "stability_index", 0.02, 0, description="Elections slightly stabilize democracies")
+        self.add_link("election", "legitimacy", 0.05, 0, description="Elections boost legitimacy")
+        self.add_link("election", "leader_change", 0.3, 0, description="Elections may change leaders")
+        self.add_link("election", "policy_shift", 0.2, 1, description="New governments shift policy")
         
         # Regime change effects
-        self.add_link("regime_change", "stability_index", -0.4, 0, desc="Regime change destabilizes")
-        self.add_link("regime_change", "gdp_growth_rate", -0.08, 1, desc="Regime change hurts economy")
-        self.add_link("regime_change", "sanctions_on", 0.4, 1, desc="Regime changes trigger sanctions")
-        self.add_link("regime_change", "alliance_changes", 0.3, 2, desc="New regime shifts alliances")
-        self.add_link("regime_change", "leader_change", 1.0, 0, desc="Regime change replaces leader")
+        self.add_link("regime_change", "stability_index", -0.4, 0, description="Regime change destabilizes")
+        self.add_link("regime_change", "gdp_growth_rate", -0.08, 1, description="Regime change hurts economy")
+        self.add_link("regime_change", "sanctions_on", 0.4, 1, description="Regime changes trigger sanctions")
+        self.add_link("regime_change", "alliance_changes", 0.3, 2, description="New regime shifts alliances")
+        self.add_link("regime_change", "leader_change", 1.0, 0, description="Regime change replaces leader")
         
         # Conflict effects
-        self.add_link("conflict_start", "stability_index", -0.2, 0, desc="Conflict reduces stability")
-        self.add_link("conflict_start", "gdp_growth_rate", -0.03, 1, desc="Conflict reduces growth")
-        self.add_link("conflict_start", "military_expenditure_usd", 0.3, 1, desc="Conflict increases military spending")
-        self.add_link("conflict_start", "refugees_origin", 10000, 1, desc="Conflict creates refugees")
-        self.add_link("conflict_start", "trade_disruption", 0.2, 1, desc="Conflict disrupts trade")
+        self.add_link("conflict_start", "stability_index", -0.2, 0, description="Conflict reduces stability")
+        self.add_link("conflict_start", "gdp_growth_rate", -0.03, 1, description="Conflict reduces growth")
+        self.add_link("conflict_start", "military_expenditure_usd", 0.3, 1, description="Conflict increases military spending")
+        self.add_link("conflict_start", "refugees_origin", 10000, 1, description="Conflict creates refugees")
+        self.add_link("conflict_start", "trade_disruption", 0.2, 1, description="Conflict disrupts trade")
         
-        self.add_link("conflict_escalation", "battle_deaths", 1000, 0, desc="Escalation increases deaths")
-        self.add_link("conflict_escalation", "nuclear_risk", 0.1, 0, desc="Escalation raises nuclear risk")
-        self.add_link("conflict_escalation", "sanctions_on", 0.3, 1, desc="Escalation triggers sanctions")
+        self.add_link("conflict_escalation", "battle_deaths", 1000, 0, description="Escalation increases deaths")
+        self.add_link("conflict_escalation", "nuclear_risk", 0.1, 0, description="Escalation raises nuclear risk")
+        self.add_link("conflict_escalation", "sanctions_on", 0.3, 1, description="Escalation triggers sanctions")
         
-        self.add_link("conflict_end", "stability_index", 0.1, 2, desc="Conflict end improves stability")
-        self.add_link("conflict_end", "gdp_growth_rate", 0.02, 4, desc="Peace dividend")
-        self.add_link("conflict_end", "refugees_return", 0.3, 4, desc="Refugees return after conflict")
+        self.add_link("conflict_end", "stability_index", 0.1, 2, description="Conflict end improves stability")
+        self.add_link("conflict_end", "gdp_growth_rate", 0.02, 4, description="Peace dividend")
+        self.add_link("conflict_end", "refugees_return", 0.3, 4, description="Refugees return after conflict")
         
         # Sanction effects
-        self.add_link("sanction_imposed", "gdp_growth_rate", -0.02, 2, desc="Sanctions reduce growth")
-        self.add_link("sanction_imposed", "trade_openness", -0.1, 1, desc="Sanctions reduce trade")
-        self.add_link("sanction_imposed", "fx_reserves_usd", -0.15, 2, desc="Sanctions drain reserves")
-        self.add_link("sanction_imposed", "inflation_rate", 0.05, 3, desc="Sanctions cause inflation")
-        self.add_link("sanction_imposed", "stability_index", -0.05, 4, desc="Sanctions may destabilize")
+        self.add_link("sanction_imposed", "gdp_growth_rate", -0.02, 2, description="Sanctions reduce growth")
+        self.add_link("sanction_imposed", "trade_openness", -0.1, 1, description="Sanctions reduce trade")
+        self.add_link("sanction_imposed", "fx_reserves_usd", -0.15, 2, description="Sanctions drain reserves")
+        self.add_link("sanction_imposed", "inflation_rate", 0.05, 3, description="Sanctions cause inflation")
+        self.add_link("sanction_imposed", "stability_index", -0.05, 4, description="Sanctions may destabilize")
         self.add_link("sanction_imposed", "regime_change", 0.02, 8, 
-                      condition=lambda s, c: c.regime_type.value == "autocracy", desc="Sanctions may topple autocracies")
+                      condition=lambda s, c: c.regime_type.value == "autocracy", description="Sanctions may topple autocracies")
         
-        self.add_link("sanction_lifted", "gdp_growth_rate", 0.01, 2, desc="Sanction relief boosts growth")
-        self.add_link("sanction_lifted", "trade_openness", 0.05, 1, desc="Sanction relief restores trade")
+        self.add_link("sanction_lifted", "gdp_growth_rate", 0.01, 2, description="Sanction relief boosts growth")
+        self.add_link("sanction_lifted", "trade_openness", 0.05, 1, description="Sanction relief restores trade")
         
         # Alliance effects
-        self.add_link("alliance_formed", "military_cooperation", 0.5, 1, desc="Alliances increase military cooperation")
-        self.add_link("alliance_formed", "trade_volume", 0.1, 2, desc="Alliances boost trade")
-        self.add_link("alliance_formed", "diplomatic_support", 0.3, 0, desc="Alliances provide diplomatic backing")
+        self.add_link("alliance_formed", "military_cooperation", 0.5, 1, description="Alliances increase military cooperation")
+        self.add_link("alliance_formed", "trade_volume", 0.1, 2, description="Alliances boost trade")
+        self.add_link("alliance_formed", "diplomatic_support", 0.3, 0, description="Alliances provide diplomatic backing")
         
-        self.add_link("alliance_dissolved", "military_cooperation", -0.5, 1, desc="Broken alliances reduce cooperation")
-        self.add_link("alliance_dissolved", "conflict_risk", 0.1, 2, desc="Broken alliances increase conflict risk")
+        self.add_link("alliance_dissolved", "military_cooperation", -0.5, 1, description="Broken alliances reduce cooperation")
+        self.add_link("alliance_dissolved", "conflict_risk", 0.1, 2, description="Broken alliances increase conflict risk")
         
         # Treaty effects
-        self.add_link("treaty_signed", "diplomatic_relations", 0.2, 0, desc="Treaties improve relations")
-        self.add_link("treaty_ratified", "compliance_cost", 0.05, 4, desc="Treaties impose compliance costs")
-        self.add_link("treaty_ratified", "credibility", 0.1, 2, desc="Treaties enhance credibility")
+        self.add_link("treaty_signed", "diplomatic_relations", 0.2, 0, description="Treaties improve relations")
+        self.add_link("treaty_ratified", "compliance_cost", 0.05, 4, description="Treaties impose compliance costs")
+        self.add_link("treaty_ratified", "credibility", 0.1, 2, description="Treaties enhance credibility")
         
         # Economic effects
-        self.add_link("gdp_shock", "stability_index", -0.1, 1, desc="Economic shocks destabilize")
-        self.add_link("gdp_shock", "protest", 0.2, 2, desc="Economic shocks trigger protests")
-        self.add_link("gdp_shock", "leader_change", 0.1, 4, desc="Economic shocks threaten leaders")
+        self.add_link("gdp_shock", "stability_index", -0.1, 1, description="Economic shocks destabilize")
+        self.add_link("gdp_shock", "protest", 0.2, 2, description="Economic shocks trigger protests")
+        self.add_link("gdp_shock", "leader_change", 0.1, 4, description="Economic shocks threaten leaders")
         
-        self.add_link("resource_discovery", "gdp_growth_rate", 0.02, 2, desc="Resource discoveries boost growth")
-        self.add_link("resource_discovery", "corruption", 0.1, 4, desc="Resource wealth increases corruption")
-        self.add_link("resource_discovery", "conflict_risk", 0.05, 2, desc="Resources attract conflict")
+        self.add_link("resource_discovery", "gdp_growth_rate", 0.02, 2, description="Resource discoveries boost growth")
+        self.add_link("resource_discovery", "corruption", 0.1, 4, description="Resource wealth increases corruption")
+        self.add_link("resource_discovery", "conflict_risk", 0.05, 2, description="Resources attract conflict")
         
         # Leader effects
-        self.add_link("leader_change", "policy_shift", 0.5, 1, desc="New leaders change policy")
-        self.add_link("leader_change", "diplomatic_relations", 0.1, 2, desc="New leaders reset relations")
+        self.add_link("leader_change", "policy_shift", 0.5, 1, description="New leaders change policy")
+        self.add_link("leader_change", "diplomatic_relations", 0.1, 2, description="New leaders reset relations")
         
         # Demographic effects
-        self.add_link("youth_bulge", "protest", 0.1, 0, desc="Youth bulge increases protest risk")
-        self.add_link("youth_bulge", "conflict_risk", 0.05, 0, desc="Youth bulge increases conflict risk")
-        self.add_link("urbanization", "gdp_growth_rate", 0.01, 4, desc="Urbanization boosts productivity")
-        self.add_link("urbanization", "protest", 0.05, 2, desc="Urbanization facilitates protests")
+        self.add_link("youth_bulge", "protest", 0.1, 0, description="Youth bulge increases protest risk")
+        self.add_link("youth_bulge", "conflict_risk", 0.05, 0, description="Youth bulge increases conflict risk")
+        self.add_link("urbanization", "gdp_growth_rate", 0.01, 4, description="Urbanization boosts productivity")
+        self.add_link("urbanization", "protest", 0.05, 2, description="Urbanization facilitates protests")
         
         # Climate/Environmental
-        self.add_link("climate_shock", "gdp_growth_rate", -0.02, 1, desc="Climate shocks reduce growth")
-        self.add_link("climate_shock", "migration", 0.1, 2, desc="Climate shocks drive migration")
-        self.add_link("climate_shock", "conflict_risk", 0.03, 4, desc="Climate stress increases conflict")
+        self.add_link("climate_shock", "gdp_growth_rate", -0.02, 1, description="Climate shocks reduce growth")
+        self.add_link("climate_shock", "migration", 0.1, 2, description="Climate shocks drive migration")
+        self.add_link("climate_shock", "conflict_risk", 0.03, 4, description="Climate stress increases conflict")
     
     def add_link(self, cause: str, effect: str, strength: float, delay: int = 0,
                  condition: Optional[Callable] = None, description: str = "") -> None:

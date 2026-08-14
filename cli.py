@@ -312,7 +312,7 @@ def _generate_countries(config: SimulationConfig) -> list:
     
     countries = []
     for i, (iso3, iso2, name, region, subregion, area, pop, gdp) in enumerate(core_countries):
-        regime_choices = list(RegimeType)
+        regime_choices = [r.value for r in RegimeType]
         weights = [0.4, 0.3, 0.2, 0.1] if i < 10 else [0.2, 0.4, 0.3, 0.1]
         regime = rng.choice(regime_choices, p=weights)
         
@@ -373,7 +373,7 @@ def _generate_countries(config: SimulationConfig) -> list:
                 population=rng.integers(100000, 50000000),
                 gdp_usd=rng.uniform(1e9, 5e11),
                 gdp_per_capita_usd=rng.uniform(500, 30000),
-                regime_type=rng.choice(list(RegimeType)),
+                regime_type=rng.choice([r.value for r in RegimeType]),
                 stability_index=rng.uniform(0.2, 0.8),
                 tier=CountryTier.EXTENDED,
             )

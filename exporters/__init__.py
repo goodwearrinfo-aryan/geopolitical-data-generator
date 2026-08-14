@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import date
+from enum import Enum
 
 import numpy as np
 import pandas as pd
@@ -16,8 +17,15 @@ from schemas.core import (
     Alliance, Treaty, Sanction, Leader, EconomicIndicator,
     TradeFlow, MigrationFlow, DemographicProfile, RegimeType,
     ConflictType, ConflictIntensity, AllianceType, SanctionType,
-    TreatyCategory, ResourceType
+    TreatyCategory, ResourceType, CountryTier
 )
+
+
+def _enum_value(val: Any) -> Any:
+    """Extract value from enum or return as-is."""
+    if isinstance(val, Enum):
+        return val.value
+    return val
 
 
 class BaseExporter:
@@ -89,7 +97,7 @@ class ParquetExporter(BaseExporter):
                 "population": country.population,
                 "gdp_usd": country.gdp_usd,
                 "gdp_per_capita_usd": country.gdp_per_capita_usd,
-                "regime_type": country.regime_type.value,
+                "regime_type": _enum_value(country.regime_type),
                 "polity_score": country.polity_score,
                 "stability_index": country.stability_index,
                 "state_fragility_index": country.state_fragility_index,
@@ -115,7 +123,7 @@ class ParquetExporter(BaseExporter):
                 "refugees_origin": country.refugees_origin,
                 "idps": country.idps,
                 "data_quality": country.data_quality,
-                "tier": country.tier.value,
+                "tier": _enum_value(country.tier),
             })
         
         if rows:
@@ -124,7 +132,6 @@ class ParquetExporter(BaseExporter):
             pq.write_table(
                 table,
                 self.output_dir / "countries.parquet",
-                partition_cols=["timestep"] if len(df) > 1000 else None,
             )
     
     def _export_events(self, state: SimulationState) -> None:
@@ -516,7 +523,7 @@ class CSVExporter(BaseExporter):
     def export(self, state: SimulationState) -> None:
         """Export all data to CSV."""
         # Similar to Parquet but write CSV
-        self._write_csv(state.countries, "countries", 
+        self._write_csv(state.countries.values(), "countries", 
                        lambda c: self._country_to_dict(state, c))
         self._write_csv(state.events, "events", 
                        lambda e: self._event_to_dict(state, e))
@@ -546,9 +553,12 @@ class CSVExporter(BaseExporter):
             df.to_csv(self.output_dir / f"{filename}.csv", index=False)
     
     def _country_to_dict(self, state: SimulationState, c: Country) -> Dict:
+        regime = c.regime_type
+        if hasattr(regime, 'value'):
+            regime = regime.value
         return {
             "timestep": state.timestep, "date": state.date, "iso3": c.iso3,
-            "name": c.name, "regime_type": c.regime_type.value,
+            "name": c.name, "regime_type": regime,
             "population": c.population, "gdp_usd": c.gdp_usd,
             "stability_index": c.stability_index, "gdp_growth_rate": c.gdp_growth_rate,
         }
