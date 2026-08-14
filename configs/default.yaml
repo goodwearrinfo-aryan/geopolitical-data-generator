@@ -1,0 +1,108 @@
+# Geopolitical Data Generator Configuration
+# Copy to config.local.yaml and modify for your environment
+
+simulation:
+  # Temporal settings
+  start_year: 2020
+  end_year: 2050
+  timestep: "monthly"  # monthly, quarterly, annual
+  
+  # Country scope
+  country_tier: "core"  # core (50), extended (195), all
+  custom_countries: []  # ISO3 codes to override
+  
+  # Random seed for reproducibility
+  seed: 42
+  
+  # Output settings
+  output_dir: "./output"
+  export_formats: ["parquet", "csv", "geojson"]
+  
+  # Streaming
+  kafka_enabled: false
+  kafka_bootstrap: "localhost:9092"
+  kafka_topic_prefix: "geopolitical"
+  
+  # Graph DB
+  neo4j_enabled: false
+  neo4j_uri: "bolt://localhost:7687"
+  neo4j_user: "neo4j"
+  neo4j_password: "password"
+
+calibration:
+  # Calibration mode
+  mode: "hybrid"  # bayesian, moment_matching, hybrid
+  
+  # Data sources for calibration
+  use_world_bank: true
+  use_inscr: true
+  use_acled: true
+  
+  # Bayesian settings (when mode includes bayesian)
+  mcmc_draws: 1000
+  mcmc_tune: 500
+  mcmc_chains: 4
+  
+  # Validation
+  backtest_years: 10
+  validation_metrics: ["gdp_rmse", "conflict_auc", "regime_transition_acc"]
+
+domains:
+  political:
+    enabled: true
+    regime_types: ["democracy", "autocracy", "anocracy", "failed_state"]
+    election_cycle_years: 4
+    coup_base_rate: 0.02
+    protest_threshold: 0.6
+  
+  conflict:
+    enabled: true
+    escalation_levels: ["tension", "skirmish", "localized", "major", "total"]
+    conflict_types: ["interstate", "civil", "ethnic", "terrorism", "proxy"]
+    casualties_distribution: "pareto"
+  
+  diplomatic:
+    enabled: true
+    alliance_types: ["defense", "economic", "cultural", "intelligence"]
+    sanction_types: ["trade", "financial", "travel", "arms", "comprehensive"]
+    treaty_categories: ["trade", "environment", "security", "human_rights", "nuclear"]
+  
+  economic:
+    enabled: true
+    gdp_growth_model: "ces_energy"  # ces_energy, cobb_douglas, endogenous
+    trade_gravity_enabled: true
+    resource_types: ["oil", "gas", "coal", "rare_earths", "water", "arable_land"]
+    aid_flow_model: "gravity"
+  
+  military:
+    enabled: true
+    expenditure_pct_gdp_range: [0.5, 5.0]
+    personnel_pct_pop_range: [0.1, 1.0]
+    equipment_categories: ["land", "air", "naval", "cyber", "space", "nuclear"]
+  
+  demographic:
+    enabled: true
+    migration_model: "gravity_push_pull"
+    urbanization_rate_range: [0.5, 3.0]
+    ethnicity_fragmentation_source: "fearon_laitin"
+
+ensemble:
+  enabled: true
+  n_scenarios: 100
+  sensitivity_method: "morris"  # morris, sobol, fast
+  n_morris_trajectories: 20
+  n_sobol_samples: 1000
+  
+  # Parameters to vary (use dot notation for nested)
+  vary_parameters:
+    - "domains.political.coup_base_rate"
+    - "domains.conflict.escalation_probability"
+    - "domains.economic.gdp_shock_std"
+    - "domains.diplomatic.alliance_formation_rate"
+    - "calibration.priors.regime_transition"
+
+weak_signals:
+  enabled: true
+  methods: ["mahalanobis", "structural_break", "critical_slowing_down"]
+  window_years: 5
+  threshold_sigma: 2.5

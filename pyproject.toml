@@ -1,0 +1,47 @@
+[project]
+name = "geopolitical-data-generator"
+version = "0.1.0"
+description = "Enterprise-grade geopolitical data generator"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "pyyaml>=6.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "pyarrow>=12.0",
+    "faker>=20.0",
+    "networkx>=3.0",
+    "scipy>=1.10",
+    "tqdm>=4.65",
+    "click>=8.0",
+    "structlog>=23.0",
+]
+
+[project.optional-dependencies]
+kafka = ["confluent-kafka>=2.0"]
+neo4j = ["neo4j>=5.0"]
+api = ["fastapi>=0.100", "uvicorn>=0.23"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1", "mypy>=1.0", "pre-commit>=3.0"]
+calibration = ["pymc>=5.0", "arviz>=0.16"]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+lint.select = ["E", "F", "I", "UP", "W", "C4", "PL"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
