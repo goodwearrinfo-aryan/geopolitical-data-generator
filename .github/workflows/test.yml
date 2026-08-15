@@ -92,7 +92,7 @@ jobs:
       
       - name: Verify fixtures
         run: |
-          python << 'EOF'
+          cat > /tmp/verify_fixtures.py << 'EOF'
 import pandas as pd
 # Check WDI
 gdp = pd.read_csv('tests/fixtures/world_bank/v1/gdp.csv')
@@ -111,6 +111,7 @@ assert events['fatalities'].min() >= 0
 
 print('All fixture checks passed!')
 EOF
+          python /tmp/verify_fixtures.py
 
   lint:
     name: Lint & Type Check
