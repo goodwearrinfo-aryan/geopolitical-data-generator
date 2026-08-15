@@ -660,7 +660,7 @@ class GeoJSONExporter(BaseExporter):
                     "iso2": country.iso2,
                     "name": country.name,
                     "region": country.region,
-                    "regime_type": country.regime_type.value,
+                    "regime_type": _enum_value(country.regime_type),
                     "population": country.population,
                     "gdp_usd": country.gdp_usd,
                     "gdp_per_capita_usd": country.gdp_per_capita_usd,
@@ -738,9 +738,10 @@ class NetworkExporter(BaseExporter):
         # Diplomatic relations network
         G_diplo = nx.Graph()
         for iso3, country in state.countries.items():
+            regime_val = _enum_value(country.regime_type)
             G_diplo.add_node(iso3, 
                            name=country.name,
-                           regime=country.regime_type.value,
+                           regime=regime_val,
                            gdp=country.gdp_usd,
                            stability=country.stability_index)
         
@@ -772,7 +773,7 @@ class NetworkExporter(BaseExporter):
                         if m1 in state.countries and m2 in state.countries:
                             G_alliance.add_edge(m1, m2, 
                                               alliance=str(alliance.id),
-                                              type=alliance.alliance_type.value)
+                                              type=_enum_value(alliance.alliance_type))
         
         # Export as GraphML
         nx.write_graphml(G_diplo, self.output_dir / f"diplomatic_network_t{state.timestep}.graphml")
@@ -906,11 +907,81 @@ class KafkaExporter(BaseExporter):
         if self._message_count % self.flush_interval == 0:
             producer.flush(timeout=5.0)
     
-    def flush(self, timeout: float = 10.0):
-        """Flush any pending messages."""
-        if self._producer:
-            self._producer.flush(timeout=timeout)
+    # Dict conversion methods (shared with CSVExporter)
+    def _country_to_dict(self, state: SimulationState, c: Country) -> Dict:
+        regime = c.regime_type
+        if hasattr(regime, 'value'):
+            regime = regime.value
+        return {
+            "timestep": state.timestep, "date": state.date, "iso3": c.iso3,
+            "name": c.name, "regime_type": regime,
+            "population": c.population, "gdp_usd": c.gdp_usd,
+            "stability_index": c.stability_index, "gdp_growth_rate": c.gdp_growth_rate,
+        }
     
+    def _event_to_dict(self, state: SimulationState, e: PoliticalEvent) -> Dict:
+        return {
+            "timestep": state.timestep, "date": e.date, "event_id": str(e.id),
+            "country_iso3": e.country_iso3, "event_type": _enum_value(e.event_type),
+            "description": e.description, "regime_change": e.regime_change,
+            "casualties": e.casualties, "outcome": e.outcome,
+        }
+    
+    def _conflict_to_dict(self, state: SimulationState, c: Conflict) -> Dict:
+        return {
+            "timestep": state.timestep, "conflict_id": str(c.id),
+            "name": c.name, "conflict_type": _enum_value(c.conflict_type),
+            "intensity": _enum_value(c.intensity), "attacker": c.primary_attacker,
+            "defender": c.primary_defender, "battle_deaths": c.battle_deaths,
+            "civilian_deaths": c.civilian_deaths, "status": c.status,
+        }
+    
+    def _alliance_to_dict(self, state: SimulationState, a: Alliance) -> Dict:
+        return {
+            "timestep": state.timestep, "alliance_id": str(a.id),
+            "name": a.name, "type": _enum_value(a.alliance_type),
+            "members": "|".join(a.members), "active": a.is_active,
+        }
+    
+    def _treaty_to_dict(self, state: SimulationState, t: Treaty) -> Dict:
+        return {
+            "timestep": state.timestep, "treaty_id": str(t.id),
+            "name": t.name, "category": _enum_value(t.category),
+            "signatories": "|".join(t.signatories), "active": t.is_active,
+        }
+    
+    def _sanction_to_dict(self, state: SimulationState, s: Sanction) -> Dict:
+        return {
+            "timestep": state.timestep, "sanction_id": str(s.id),
+            "name": s.name, "type": _enum_value(s.sanction_type),
+            "target": s.target_country, "imposers": "|".join(s.imposing_countries),
+            "status": s.status,
+        }
+    
+    def _indicator_to_dict(self, state: SimulationState, i: EconomicIndicator) -> Dict:
+        return {
+            "timestep": state.timestep, "indicator_id": str(i.id),
+            "country_iso3": i.country_iso3, "year": i.year,
+            "gdp_nominal_usd": i.gdp_nominal_usd, "gdp_growth_pct": i.gdp_growth_pct,
+            "inflation_pct": i.inflation_pct, "unemployment_pct": i.unemployment_pct,
+        }
+    
+    def _trade_flow_to_dict(self, state: SimulationState, f: TradeFlow) -> Dict:
+        return {
+            "timestep": state.timestep, "flow_id": str(f.id),
+            "year": f.year, "exporter": f.exporter_iso3,
+            "importer": f.importer_iso3, "product": f.product_code,
+            "value_usd": f.value_usd,
+        }
+    
+    def _migration_flow_to_dict(self, state: SimulationState, f: MigrationFlow) -> Dict:
+        return {
+            "timestep": state.timestep, "flow_id": str(f.id),
+            "year": f.year, "origin": f.origin_iso3,
+            "destination": f.destination_iso3, "migrants": f.migrants,
+            "type": f.flow_type,
+        }
+
     def close(self):
         """Close producer and flush."""
         self.flush()

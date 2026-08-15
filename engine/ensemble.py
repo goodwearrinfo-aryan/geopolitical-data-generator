@@ -55,7 +55,8 @@ class EnsembleEngine:
         n_workers: int = 4,
         seed: int = 42,
     ):
-        self.base_config = base_config
+        # Store only picklable config data
+        self.base_config = self._make_picklable(base_config)
         self.n_workers = n_workers
         self.base_seed = seed
         self.rng = np.random.default_rng(seed)
@@ -63,6 +64,24 @@ class EnsembleEngine:
         # Results storage
         self.results: List[EnsembleResult] = []
         self.sensitivity_results: List[SensitivityResult] = []
+    
+    def _make_picklable(self, obj: Any) -> Any:
+        """Convert config to picklable format (dict with primitive types)."""
+        if hasattr(obj, '__dict__'):
+            # Dataclass or object with __dict__
+            result = {}
+            for key, value in obj.__dict__.items():
+                if not key.startswith("_"):
+                    result[key] = self._make_picklable(value)
+            return result
+        elif isinstance(obj, dict):
+            return {k: self._make_picklable(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._make_picklable(v) for v in obj]
+        elif hasattr(obj, 'value'):  # Enum
+            return obj.value
+        else:
+            return obj
     
     def run_ensemble(
         self,
@@ -460,11 +479,22 @@ class EnsembleEngine:
         print(f"Exported ensemble results to {output_dir}")
 
 
-def create_ensemble_engine(config: Dict[str, Any]) -> EnsembleEngine:
+def create_ensemble_engine(config: Any) -> EnsembleEngine:
     """Factory function to create ensemble engine from config."""
-    ensemble_config = config.get("ensemble", {})
+    # Handle both dict and dataclass config
+    if hasattr(config, '__dict__'):
+        # Dataclass
+        ensemble_config = config.ensemble
+        n_workers = getattr(ensemble_config, 'n_workers', 4)
+        seed = config.simulation.seed
+    else:
+        # Dict
+        ensemble_config = config.get("ensemble", {})
+        n_workers = ensemble_config.get("n_workers", 4)
+        seed = config.get("simulation", {}).get("seed", 42)
+    
     return EnsembleEngine(
         base_config=config,
-        n_workers=ensemble_config.get("n_workers", 4),
-        seed=config.get("simulation", {}).get("seed", 42),
+        n_workers=n_workers,
+        seed=seed,
     )

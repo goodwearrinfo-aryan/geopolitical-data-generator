@@ -248,7 +248,8 @@ class EventGenerator:
         temporal: TemporalEngine,
     ) -> List[PoliticalEvent]:
         events = []
-        regime_key = country.regime_type.value
+        # Handle both enum and string regime_type
+        regime_key = country.regime_type.value if hasattr(country.regime_type, 'value') else country.regime_type
         
         # Check for scheduled elections
         if country.next_election_year and temporal.current_date.year >= country.next_election_year:
@@ -273,6 +274,7 @@ class EventGenerator:
     def _get_probability_multiplier(self, country: Country, event_type: EventType) -> float:
         """Calculate probability multiplier based on country conditions."""
         multiplier = 1.0
+        regime_key = country.regime_type.value if hasattr(country.regime_type, 'value') else country.regime_type
         
         if event_type == EventType.COUP:
             multiplier *= (1 + country.coup_risk * 10)
@@ -281,7 +283,7 @@ class EventGenerator:
         elif event_type == EventType.PROTEST:
             multiplier *= (1 + country.protest_level * 5)
             multiplier *= (1 + (1 - country.stability_index) * 3)
-            if country.regime_type.value == "autocracy":
+            if regime_key == "autocracy":
                 multiplier *= 0.5  # Protests less likely but more significant
         
         elif event_type == EventType.REGIME_CHANGE:
@@ -291,7 +293,7 @@ class EventGenerator:
                 # multiplier *= (1 + leader.risk_tolerance) if leader else 1.0
         
         elif event_type == EventType.ELECTION:
-            if country.regime_type.value == "democracy":
+            if regime_key == "democracy":
                 multiplier *= 1.0
             else:
                 multiplier *= 0.1

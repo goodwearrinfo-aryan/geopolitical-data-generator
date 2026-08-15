@@ -452,7 +452,7 @@ class CalibrationEngine:
             # Compute year-over-year correlation
             polity_pivot = polity_df.pivot(index="country", columns="year", values="polity2")
             if polity_pivot.shape[1] > 1:
-                autocorr = polity_pivot.corrwith(polarity_pivot.shift(1, axis=1)).mean()
+                autocorr = polity_pivot.corrwith(polity_pivot.shift(1, axis=1)).mean()
                 moments.append(autocorr if not np.isnan(autocorr) else 0.95)
             else:
                 moments.append(0.95)

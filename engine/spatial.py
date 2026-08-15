@@ -364,7 +364,9 @@ class SpatialEngine:
         # Regime similarity (instability contagion)
         conflict_regime = state.countries[conflict_country].regime_type
         target_regime = state.countries[target_country].regime_type
-        if conflict_regime == target_regime and conflict_regime.value in ["anocracy", "failed_state"]:
+        conflict_regime_str = conflict_regime.value if hasattr(conflict_regime, 'value') else conflict_regime
+        target_regime_str = target_regime.value if hasattr(target_regime, 'value') else target_regime
+        if conflict_regime_str == target_regime_str and conflict_regime_str in ["anocracy", "failed_state"]:
             base_prob += 0.1
         
         # Alliance obligations
@@ -418,10 +420,11 @@ def build_spatial_graph(state: SimulationState, spatial: SpatialEngine) -> nx.Gr
     G = nx.Graph()
     
     for iso3, country in state.countries.items():
+        regime_val = country.regime_type.value if hasattr(country.regime_type, 'value') else country.regime_type
         G.add_node(iso3, 
                    gdp=country.gdp_usd,
                    population=country.population,
-                   regime=country.regime_type.value,
+                   regime=regime_val,
                    stability=country.stability_index)
     
     # Add edges for neighbors

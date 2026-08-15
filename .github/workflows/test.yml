@@ -1,0 +1,197 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      
+      - name: Install dependencies
+        run: |
+          pip install -e .[dev,calibration]
+      
+      - name: Generate test fixtures
+        run: |
+          python tests/generate_wdi.py --countries 50 --years 10
+          python tests/generate_inscr.py --countries 50 --years 10
+          python tests/generate_acled.py --countries 50 --years 10
+      
+      - name: Run unit tests
+        run: |
+          pytest tests/unit -v --cov=geopolitical_data_generator --cov-report=xml --cov-report=term-missing
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      
+      - name: Install dependencies
+        run: |
+          pip install -e .[dev]
+      
+      - name: Generate test fixtures
+        run: |
+          python tests/generate_wdi.py --countries 50 --years 10
+          python tests/generate_inscr.py --countries 50 --years 10
+          python tests/generate_acled.py --countries 50 --years 10
+      
+      - name: Run integration tests
+        run: |
+          pytest tests/integration -v -k "not streaming"
+
+  fixture-generation:
+    name: Fixture Generation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      
+      - name: Install dependencies
+        run: |
+          pip install -e .
+      
+      - name: Generate all fixtures
+        run: |
+          python tests/generate_wdi.py --countries 50 --years 10
+          python tests/generate_inscr.py --countries 50 --years 10
+          python tests/generate_acled.py --countries 50 --years 10
+      
+      - name: Verify fixtures
+        run: |
+          python -c "
+import pandas as pd
+# Check WDI
+gdp = pd.read_csv('tests/fixtures/world_bank/v1/gdp.csv')
+assert len(gdp) == 500, f'Expected 500 rows, got {len(gdp)}'
+assert gdp['gdp_usd'].min() > 0
+
+# Check INSCR
+polity = pd.read_csv('tests/fixtures/inscr/v1/polity.csv')
+assert len(polity) == 500
+assert polity['polity2'].between(-10, 10).all()
+
+# Check ACLED
+events = pd.read_csv('tests/fixtures/acled/v1/events.csv')
+assert len(events) > 10000
+assert events['fatalities'].min() >= 0
+
+print('All fixture checks passed!')
+          "
+
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      
+      - name: Install dependencies
+        run: |
+          pip install -e .[dev]
+      
+      - name: Run ruff
+        run: |
+          ruff check .
+      
+      - name: Run mypy
+        run: |
+          mypy --strict geopolitical_data_generator config engine calibration exporters schemas cli.py
+
+  streaming-tests:
+    name: Streaming Tests (Mock)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      
+      - name: Install dependencies
+        run: |
+          pip install -e .[dev,kafka,neo4j]
+      
+      - name: Run streaming tests (mocked)
+        run: |
+          pytest tests/integration/test_streaming_pipeline.py -v -m streaming
+
+  # Optional: Full streaming tests with real services (run manually or on schedule)
+  # streaming-tests-real:
+  #   name: Streaming Tests (Real Services)
+  #   runs-on: ubuntu-latest
+  #   if: false  # Set to true to enable
+  #   services:
+  #     kafka:
+  #       image: confluentinc/cp-kafka:7.5.0
+  #       ports: ["9092:9092"]
+  #       env:
+  #         KAFKA_BROKER_ID: 1
+  #         KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+  #         KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+  #         KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  #     zookeeper:
+  #       image: confluentinc/cp-zookeeper:7.5.0
+  #       ports: ["2181:2181"]
+  #       env:
+  #         ZOOKEEPER_CLIENT_PORT: 2181
+  #         ZOOKEEPER_TICK_TIME: 2000
+  #     neo4j:
+  #       image: neo4j:5.15
+  #       ports: ["7687:7687", "7474:7474"]
+  #       env:
+  #         NEO4J_AUTH: neo4j/password
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.11"
+  #         cache: "pip"
+  #     - run: pip install -e .[dev,kafka,neo4j]
+  #     - run: pytest tests/integration/test_streaming_pipeline.py -v -m streaming --timeout=120
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true

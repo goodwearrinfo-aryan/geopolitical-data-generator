@@ -87,7 +87,7 @@ class CausalEngine:
         self.add_link("sanction_imposed", "inflation_rate", 0.05, 3, description="Sanctions cause inflation")
         self.add_link("sanction_imposed", "stability_index", -0.05, 4, description="Sanctions may destabilize")
         self.add_link("sanction_imposed", "regime_change", 0.02, 8, 
-                      condition=lambda s, c: c.regime_type.value == "autocracy", description="Sanctions may topple autocracies")
+                      condition=lambda s, c: (c.regime_type.value if hasattr(c.regime_type, 'value') else c.regime_type) == "autocracy", description="Sanctions may topple autocracies")
         
         self.add_link("sanction_lifted", "gdp_growth_rate", 0.01, 2, description="Sanction relief boosts growth")
         self.add_link("sanction_lifted", "trade_openness", 0.05, 1, description="Sanction relief restores trade")
@@ -148,7 +148,7 @@ class CausalEngine:
                       temporal: TemporalEngine) -> List[tuple]:
         """Process an event and return downstream effects to apply."""
         effects = []
-        cause_key = event.event_type.value
+        cause_key = event.event_type.value if hasattr(event.event_type, 'value') else event.event_type
         
         if cause_key not in self.causal_graph:
             return effects

@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Optional
 
 import click
+import numpy as np
+from faker import Faker
 import structlog
 import yaml
 
@@ -57,11 +59,12 @@ def cli(ctx: click.Context, config: Optional[str], verbose: bool):
 def run(ctx: click.Context, output: str, format: tuple, timesteps: Optional[int], seed: Optional[int], stream: bool):
     """Run a single simulation."""
     config = ctx.obj["config"]
+    sim_config = _get_simulation_config(config)
     
     if seed is not None:
-        config.seed = seed
+        sim_config.seed = seed
     
-    logger.info("Starting simulation", seed=config.seed, timesteps=timesteps, stream=stream)
+    logger.info("Starting simulation", seed=sim_config.seed, timesteps=timesteps, stream=stream)
     
     # Initialize simulation
     state = _initialize_simulation(config)
@@ -75,18 +78,18 @@ def run(ctx: click.Context, output: str, format: tuple, timesteps: Optional[int]
     neo4j_exporter = None
     
     if stream:
-        if "kafka" in format or config.kafka_enabled:
+        if "kafka" in format or config.simulation.kafka_enabled:
             kafka_exporter = get_exporter(
                 "kafka", output,
-                bootstrap_servers=config.kafka_bootstrap,
-                topic_prefix=config.kafka_topic_prefix,
+                bootstrap_servers=config.simulation.kafka_bootstrap,
+                topic_prefix=config.simulation.kafka_topic_prefix,
             )
-        if "neo4j" in format or config.neo4j_enabled:
+        if "neo4j" in format or config.simulation.neo4j_enabled:
             neo4j_exporter = get_exporter(
                 "neo4j", output,
-                uri=config.neo4j_uri,
-                user=config.neo4j_user,
-                password=config.neo4j_password,
+                uri=config.simulation.neo4j_uri,
+                user=config.simulation.neo4j_user,
+                password=config.simulation.neo4j_password,
             )
     
     # Run simulation
@@ -156,12 +159,12 @@ def run(ctx: click.Context, output: str, format: tuple, timesteps: Optional[int]
 def ensemble(ctx: click.Context, scenarios: int, output: str, workers: int, sensitivity: bool):
     """Run ensemble simulation."""
     config = ctx.obj["config"]
-    config.ensemble_enabled = True
-    config.n_scenarios = scenarios
+    config.ensemble.enabled = True
+    config.ensemble.n_scenarios = scenarios
     
     logger.info("Starting ensemble", scenarios=scenarios, workers=workers)
     
-    engine = create_ensemble_engine(config.__dict__)
+    engine = create_ensemble_engine(config)
     engine.n_workers = workers
     
     def progress(done: int, total: int):
@@ -198,6 +201,7 @@ def ensemble(ctx: click.Context, scenarios: int, output: str, workers: int, sens
 def calibrate(ctx: click.Context, data_dir: str, method: str, output: str, validate: bool):
     """Calibrate model parameters against historical data."""
     config = ctx.obj["config"]
+    sim_config = _get_simulation_config(config)
     
     logger.info("Starting calibration", method=method, data_dir=data_dir)
     
@@ -251,27 +255,52 @@ def init_config(ctx: click.Context, output: str):
 def validate(ctx: click.Context):
     """Validate configuration and data."""
     config = ctx.obj["config"]
+    sim_config = _get_simulation_config(config)
+    ensemble_config = config.ensemble
+    domains_config = config.domains
+    calibration_config = config.calibration
     
     click.echo("Configuration validation:")
-    click.echo(f"  Simulation: {config.start_year}-{config.end_year} ({config.timestep})")
-    click.echo(f"  Countries: {config.country_tier.value}")
-    click.echo(f"  Seed: {config.seed}")
-    click.echo(f"  Output: {config.output_dir}")
-    click.echo(f"  Formats: {config.export_formats}")
-    click.echo(f"  Ensemble: {config.ensemble_enabled} ({config.n_scenarios} scenarios)")
-    click.echo(f"  Calibration: {config.calibration_mode}")
+    click.echo(f"  Simulation: {sim_config.start_year}-{sim_config.end_year} ({sim_config.timestep})")
+    click.echo(f"  Countries: {sim_config.country_tier.value}")
+    click.echo(f"  Seed: {sim_config.seed}")
+    click.echo(f"  Output: {sim_config.output_dir}")
+    click.echo(f"  Formats: {sim_config.export_formats}")
+    click.echo(f"  Ensemble: {ensemble_config.enabled} ({ensemble_config.n_scenarios} scenarios)")
+    click.echo(f"  Calibration: {calibration_config.mode}")
     
     click.echo("\nDomains enabled:")
     for domain in ["political", "conflict", "diplomatic", "economic", "military", "demographic"]:
-        enabled = getattr(config, f"{domain}_enabled", False)
+        enabled = getattr(config.domains, domain).enabled
         click.echo(f"  {domain}: {enabled}")
     
     click.echo("\nValidation passed!")
 
 
+def _get_simulation_config(config: SimulationConfig):
+    """Get the simulation config section."""
+    return config.simulation
+
+
+def _get_calibration_config(config: SimulationConfig):
+    """Get the calibration config section."""
+    return config.calibration
+
+
+def _get_domains_config(config: SimulationConfig):
+    """Get the domains config section."""
+    return config.domains
+
+
+def _get_ensemble_config(config: SimulationConfig):
+    """Get the ensemble config section."""
+    return config.ensemble
+
+
 def _initialize_simulation(config: SimulationConfig) -> SimulationState:
     """Initialize simulation state with countries."""
-    state = SimulationState(timestep=0, date=date(config.start_year, 1, 1))
+    sim_config = _get_simulation_config(config)
+    state = SimulationState(timestep=0, date=date(sim_config.start_year, 1, 1))
     
     # Load or generate countries
     countries = _generate_countries(config)
@@ -285,12 +314,10 @@ def _initialize_simulation(config: SimulationConfig) -> SimulationState:
 
 def _generate_countries(config: SimulationConfig) -> list:
     """Generate or load country data."""
-    from faker import Faker
-    import numpy as np
-    
-    rng = np.random.default_rng(config.seed)
+    sim_config = _get_simulation_config(config)
+    rng = np.random.default_rng(sim_config.seed)
     fake = Faker()
-    fake.seed_instance(config.seed)
+    fake.seed_instance(sim_config.seed)
     
     # Core countries (major economies/populations)
     core_countries = [
@@ -393,7 +420,7 @@ def _generate_countries(config: SimulationConfig) -> list:
         countries.append(country)
     
     # Add extended countries if needed
-    if config.country_tier in [CountryTier.EXTENDED, CountryTier.ALL]:
+    if sim_config.country_tier in [CountryTier.EXTENDED, CountryTier.ALL]:
         # Generate additional countries with Faker
         for i in range(150):
             iso3 = fake.country_code(representation="alpha-3")
@@ -422,16 +449,17 @@ def _generate_countries(config: SimulationConfig) -> list:
 
 def _create_temporal_engine(config: SimulationConfig) -> TemporalEngine:
     """Create temporal engine from config."""
+    sim_config = _get_simulation_config(config)
     freq_map = {
         "monthly": TimestepFrequency.MONTHLY,
         "quarterly": TimestepFrequency.QUARTERLY,
         "annual": TimestepFrequency.ANNUAL,
     }
     return TemporalEngine(
-        start_date=date(config.start_year, 1, 1),
-        end_date=date(config.end_year, 12, 31),
-        frequency=freq_map.get(config.timestep, TimestepFrequency.MONTHLY),
-        seed=config.seed,
+        start_date=date(sim_config.start_year, 1, 1),
+        end_date=date(sim_config.end_year, 12, 31),
+        frequency=freq_map.get(sim_config.timestep, TimestepFrequency.MONTHLY),
+        seed=sim_config.seed,
     )
 
 
