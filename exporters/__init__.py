@@ -786,16 +786,452 @@ class NetworkExporter(BaseExporter):
                 json.dump(data, f)
 
 
-def get_exporter(format_name: str, output_dir: str) -> BaseExporter:
-    """Factory function to get exporter by format name."""
+class KafkaExporter(BaseExporter):
+    """Stream simulation events to Kafka topics.
+    
+    Topics:
+    - geopolitical.countries: Country state snapshots (keyed by iso3)
+    - geopolitical.events: Political events (keyed by event_id)
+    - geopolitical.conflicts: Conflict updates (keyed by conflict_id)
+    - geopolitical.economic: Economic indicators (keyed by iso3)
+    - geopolitical.trade: Trade flows (keyed by exporter_iso3)
+    - geopolitical.migration: Migration flows (keyed by origin_iso3)
+    """
+    
+    def __init__(
+        self, 
+        output_dir: str, 
+        bootstrap_servers: str = "localhost:9092",
+        topic_prefix: str = "geopolitical",
+        flush_interval: int = 100,
+    ):
+        super().__init__(output_dir)
+        self.bootstrap_servers = bootstrap_servers
+        self.topic_prefix = topic_prefix
+        self.flush_interval = flush_interval
+        self._producer = None
+        self._message_count = 0
+    
+    def _get_producer(self):
+        """Lazy-initialize Kafka producer."""
+        if self._producer is None:
+            try:
+                from confluent_kafka import Producer
+            except ImportError:
+                raise ImportError("confluent-kafka required for KafkaExporter. Install with: pip install confluent-kafka")
+            
+            self._producer = Producer({
+                'bootstrap.servers': self.bootstrap_servers,
+                'acks': 'all',
+                'retries': 3,
+                'linger.ms': 10,
+                'batch.size': 16384,
+                'compression.type': 'snappy',
+            })
+        return self._producer
+    
+    def _serialize(self, obj: Any) -> bytes:
+        """Serialize object to JSON bytes."""
+        import json
+        return json.dumps(obj, default=str).encode('utf-8')
+    
+    def _delivery_report(self, err, msg):
+        """Callback for message delivery confirmation."""
+        if err is not None:
+            print(f"Kafka delivery failed: {err}")
+    
+    def export(self, state: SimulationState) -> None:
+        """Export current simulation state to Kafka."""
+        producer = self._get_producer()
+        
+        # Countries - current state snapshot
+        for country in state.countries.values():
+            producer.produce(
+                f"{self.topic_prefix}.countries",
+                key=country.iso3.encode(),
+                value=self._serialize(self._country_to_dict(state, country)),
+                callback=self._delivery_report,
+            )
+        
+        # Events - only new events this timestep
+        for event in state.events:
+            producer.produce(
+                f"{self.topic_prefix}.events",
+                key=str(event.id).encode(),
+                value=self._serialize(self._event_to_dict(state, event)),
+                callback=self._delivery_report,
+            )
+        
+        # Conflicts
+        for conflict in state.conflicts.values():
+            producer.produce(
+                f"{self.topic_prefix}.conflicts",
+                key=str(conflict.id).encode(),
+                value=self._serialize(self._conflict_to_dict(state, conflict)),
+                callback=self._delivery_report,
+            )
+        
+        # Economic indicators
+        for indicator in state.economic_indicators:
+            if indicator.year == state.date.year:
+                producer.produce(
+                    f"{self.topic_prefix}.economic",
+                    key=indicator.country_iso3.encode(),
+                    value=self._serialize(self._indicator_to_dict(state, indicator)),
+                    callback=self._delivery_report,
+                )
+        
+        # Trade flows
+        for flow in state.trade_flows:
+            if flow.year == state.date.year:
+                producer.produce(
+                    f"{self.topic_prefix}.trade",
+                    key=flow.exporter_iso3.encode(),
+                    value=self._serialize(self._trade_flow_to_dict(state, flow)),
+                    callback=self._delivery_report,
+                )
+        
+        # Migration flows
+        for flow in state.migration_flows:
+            if flow.year == state.date.year:
+                producer.produce(
+                    f"{self.topic_prefix}.migration",
+                    key=flow.origin_iso3.encode(),
+                    value=self._serialize(self._migration_flow_to_dict(state, flow)),
+                    callback=self._delivery_report,
+                )
+        
+        # Flush periodically
+        self._message_count += 1
+        if self._message_count % self.flush_interval == 0:
+            producer.flush(timeout=5.0)
+    
+    def flush(self, timeout: float = 10.0):
+        """Flush any pending messages."""
+        if self._producer:
+            self._producer.flush(timeout=timeout)
+    
+    def close(self):
+        """Close producer and flush."""
+        self.flush()
+        if self._producer:
+            self._producer = None
+
+
+class Neo4jExporter(BaseExporter):
+    """Export simulation state as a property graph to Neo4j.
+    
+    Nodes:
+    - Country: iso3, name, regime_type, region, gdp_usd, population, stability_index
+    - Leader: id, name, country_iso3, title, ideology, start_date
+    - Conflict: id, name, type, intensity, battle_deaths, status
+    - Alliance: id, name, type, founding_date, cohesion
+    - Treaty: id, name, category, signed_date, is_active
+    - Sanction: id, name, type, target_country, status
+    
+    Relationships:
+    - (Country)-[:BORDERS {length_km}]->(Country)
+    - (Country)-[:TRADES_WITH {value_usd, year}]->(Country)
+    - (Country)-[:ALLIED_WITH {type, since}]->(Country)
+    - (Country)-[:HAS_TREATY {category}]->(Treaty)
+    - (Country)-[:IMPOSES_SANCTION {type, since}]->(Sanction)
+    - (Country)-[:HAS_LEADER {since}]->(Leader)
+    - (Conflict)-[:INVOLVES {role}]->(Country)
+    - (Alliance)-[:HAS_MEMBER]->(Country)
+    """
+    
+    def __init__(
+        self, 
+        output_dir: str, 
+        uri: str = "bolt://localhost:7687", 
+        user: str = "neo4j", 
+        password: str = "password",
+        batch_size: int = 1000,
+    ):
+        super().__init__(output_dir)
+        self.uri = uri
+        self.user = user
+        self.password = password
+        self.batch_size = batch_size
+        self._driver = None
+    
+    def _get_driver(self):
+        """Lazy-initialize Neo4j driver."""
+        if self._driver is None:
+            try:
+                from neo4j import GraphDatabase
+            except ImportError:
+                raise ImportError("neo4j driver required for Neo4jExporter. Install with: pip install neo4j")
+            
+            self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+        return self._driver
+    
+    def export(self, state: SimulationState) -> None:
+        """Export current simulation state to Neo4j."""
+        driver = self._get_driver()
+        
+        with driver.session() as session:
+            # Upsert countries
+            for country in state.countries.values():
+                session.execute_write(self._upsert_country, country, state.timestep)
+            
+            # Trade relationships
+            for country in state.countries.values():
+                for partner, volume in country.trade_partners.items():
+                    if partner in state.countries and volume > 0:
+                        session.execute_write(self._upsert_trade, country.iso3, partner, volume, state.date.year)
+            
+            # Diplomatic relations
+            for country in state.countries.values():
+                for target, level in country.diplomatic_relations.items():
+                    if target in state.countries and level != 0:
+                        session.execute_write(self._upsert_diplomatic, country.iso3, target, level)
+            
+            # Alliances
+            for alliance in state.alliances.values():
+                session.execute_write(self._upsert_alliance, alliance, state.timestep)
+            
+            # Conflicts
+            for conflict in state.conflicts.values():
+                session.execute_write(self._upsert_conflict, conflict, state.timestep)
+            
+            # Treaties
+            for treaty in state.treaties.values():
+                session.execute_write(self._upsert_treaty, treaty)
+            
+            # Sanctions
+            for sanction in state.sanctions.values():
+                session.execute_write(self._upsert_sanction, sanction)
+            
+            # Leaders
+            for leader in state.leaders.values():
+                if leader.is_active:
+                    session.execute_write(self._upsert_leader, leader)
+    
+    @staticmethod
+    def _upsert_country(tx, country, timestep):
+        tx.run("""
+            MERGE (c:Country {iso3: $iso3})
+            SET c.name = $name,
+                c.regime_type = $regime_type,
+                c.region = $region,
+                c.subregion = $subregion,
+                c.population = $population,
+                c.gdp_usd = $gdp_usd,
+                c.gdp_per_capita_usd = $gdp_per_capita_usd,
+                c.stability_index = $stability_index,
+                c.gdp_growth_rate = $gdp_growth_rate,
+                c.military_expenditure_usd = $military_expenditure_usd,
+                c.nuclear_arsenal = $nuclear_arsenal,
+                c.urbanization_rate = $urbanization_rate,
+                c.median_age = $median_age,
+                c.refugees_hosted = $refugees_hosted,
+                c.refugees_origin = $refugees_origin,
+                c.idps = $idps,
+                c.last_timestep = $timestep,
+                c.updated_at = datetime()
+        """, 
+        iso3=country.iso3,
+        name=country.name,
+        regime_type=country.regime_type.value if hasattr(country.regime_type, 'value') else country.regime_type,
+        region=country.region,
+        subregion=country.subregion,
+        population=country.population,
+        gdp_usd=country.gdp_usd,
+        gdp_per_capita_usd=country.gdp_per_capita_usd,
+        stability_index=country.stability_index,
+        gdp_growth_rate=country.gdp_growth_rate,
+        military_expenditure_usd=country.military_expenditure_usd,
+        nuclear_arsenal=country.nuclear_arsenal,
+        urbanization_rate=country.urbanization_rate,
+        median_age=country.median_age,
+        refugees_hosted=country.refugees_hosted,
+        refugees_origin=country.refugees_origin,
+        idps=country.idps,
+        timestep=timestep)
+    
+    @staticmethod
+    def _upsert_trade(tx, exporter_iso3, importer_iso3, volume, year):
+        tx.run("""
+            MERGE (exporter:Country {iso3: $exporter_iso3})
+            MERGE (importer:Country {iso3: $importer_iso3})
+            MERGE (exporter)-[t:TRADES_WITH {year: $year}]->(importer)
+            SET t.value_usd = $volume, t.updated_at = datetime()
+        """, exporter_iso3=exporter_iso3, importer_iso3=importer_iso3, volume=volume, year=year)
+    
+    @staticmethod
+    def _upsert_diplomatic(tx, source_iso3, target_iso3, level):
+        tx.run("""
+            MERGE (source:Country {iso3: $source_iso3})
+            MERGE (target:Country {iso3: $target_iso3})
+            MERGE (source)-[r:DIPLOMATIC_RELATIONS]->(target)
+            SET r.level = $level, r.updated_at = datetime()
+        """, source_iso3=source_iso3, target_iso3=target_iso3, level=level)
+    
+    @staticmethod
+    def _upsert_alliance(tx, alliance, timestep):
+        tx.run("""
+            MERGE (a:Alliance {id: $id})
+            SET a.name = $name,
+                a.type = $type,
+                a.founding_date = $founding_date,
+                a.cohesion = $cohesion,
+                a.is_active = $is_active,
+                a.last_timestep = $timestep,
+                a.updated_at = datetime()
+            WITH a
+            UNWIND $members AS member_iso3
+            MERGE (c:Country {iso3: member_iso3})
+            MERGE (a)-[:HAS_MEMBER]->(c)
+        """,
+        id=str(alliance.id),
+        name=alliance.name,
+        type=alliance.alliance_type.value if hasattr(alliance.alliance_type, 'value') else alliance.alliance_type,
+        founding_date=str(alliance.founding_date),
+        cohesion=alliance.cohesion,
+        is_active=alliance.is_active,
+        timestep=timestep,
+        members=alliance.members)
+    
+    @staticmethod
+    def _upsert_conflict(tx, conflict, timestep):
+        tx.run("""
+            MERGE (c:Conflict {id: $id})
+            SET c.name = $name,
+                c.type = $type,
+                c.intensity = $intensity,
+                c.battle_deaths = $battle_deaths,
+                c.civilian_deaths = $civilian_deaths,
+                c.displaced_persons = $displaced_persons,
+                c.status = $status,
+                c.start_date = $start_date,
+                c.end_date = $end_date,
+                c.last_timestep = $timestep,
+                c.updated_at = datetime()
+            WITH c
+            MERGE (attacker:Country {iso3: $attacker})
+            MERGE (defender:Country {iso3: $defender})
+            MERGE (attacker)-[:INVOLVES {role: 'attacker'}]->(c)
+            MERGE (defender)-[:INVOLVES {role: 'defender'}]->(c)
+        """,
+        id=str(conflict.id),
+        name=conflict.name,
+        type=conflict.conflict_type.value if hasattr(conflict.conflict_type, 'value') else conflict.conflict_type,
+        intensity=conflict.intensity.value if hasattr(conflict.intensity, 'value') else conflict.intensity,
+        battle_deaths=conflict.battle_deaths,
+        civilian_deaths=conflict.civilian_deaths,
+        displaced_persons=conflict.displaced_persons,
+        status=conflict.status,
+        start_date=str(conflict.start_date),
+        end_date=str(conflict.end_date) if conflict.end_date else None,
+        timestep=timestep,
+        attacker=conflict.primary_attacker,
+        defender=conflict.primary_defender)
+    
+    @staticmethod
+    def _upsert_treaty(tx, treaty):
+        tx.run("""
+            MERGE (t:Treaty {id: $id})
+            SET t.name = $name,
+                t.category = $category,
+                t.signed_date = $signed_date,
+                t.ratified_date = $ratified_date,
+                t.is_active = $is_active,
+                t.updated_at = datetime()
+            WITH t
+            UNWIND $signatories AS signatory_iso3
+            MERGE (c:Country {iso3: signatory_iso3})
+            MERGE (c)-[:SIGNED {category: $category}]->(t)
+            WITH t
+            UNWIND $ratifiers AS ratifier_iso3
+            MERGE (c2:Country {iso3: ratifier_iso3})
+            MERGE (c2)-[:RATIFIED {category: $category}]->(t)
+        """,
+        id=str(treaty.id),
+        name=treaty.name,
+        category=treaty.category.value if hasattr(treaty.category, 'value') else treaty.category,
+        signed_date=str(treaty.signed_date),
+        ratified_date=str(treaty.ratified_date) if treaty.ratified_date else None,
+        is_active=treaty.is_active,
+        signatories=treaty.signatories,
+        ratifiers=treaty.ratifiers)
+    
+    @staticmethod
+    def _upsert_sanction(tx, sanction):
+        tx.run("""
+            MERGE (s:Sanction {id: $id})
+            SET s.name = $name,
+                s.type = $type,
+                s.status = $status,
+                s.imposed_date = $imposed_date,
+                s.lifted_date = $lifted_date,
+                s.updated_at = datetime()
+            WITH s
+            MERGE (target:Country {iso3: $target_country})
+            MERGE (target)-[:SANCTIONED {type: $type}]->(s)
+            WITH s
+            UNWIND $imposers AS imposer_iso3
+            MERGE (imposer:Country {iso3: imposer_iso3})
+            MERGE (imposer)-[:IMPOSED {type: $type}]->(s)
+        """,
+        id=str(sanction.id),
+        name=sanction.name,
+        type=sanction.sanction_type.value if hasattr(sanction.sanction_type, 'value') else sanction.sanction_type,
+        status=sanction.status,
+        imposed_date=str(sanction.imposed_date),
+        lifted_date=str(sanction.lifted_date) if sanction.lifted_date else None,
+        target_country=sanction.target_country,
+        imposers=sanction.imposing_countries)
+    
+    @staticmethod
+    def _upsert_leader(tx, leader):
+        tx.run("""
+            MERGE (l:Leader {id: $id})
+            SET l.name = $name,
+                l.title = $title,
+                l.ideology = $ideology,
+                l.party = $party,
+                l.start_date = $start_date,
+                l.is_active = $is_active,
+                l.updated_at = datetime()
+            WITH l
+            MERGE (c:Country {iso3: $country_iso3})
+            MERGE (c)-[:HAS_LEADER {since: $start_date}]->(l)
+        """,
+        id=str(leader.id),
+        name=leader.name,
+        title=leader.title,
+        ideology=leader.ideology,
+        party=leader.party,
+        start_date=str(leader.start_date),
+        is_active=leader.is_active,
+        country_iso3=leader.country_iso3)
+    
+    def close(self):
+        """Close driver connection."""
+        if self._driver:
+            self._driver.close()
+            self._driver = None
+
+
+def get_exporter(format_name: str, output_dir: str, **kwargs) -> BaseExporter:
+    """Factory function to get exporter by format name.
+    
+    Additional kwargs for specific exporters:
+    - kafka: bootstrap_servers, topic_prefix, flush_interval
+    - neo4j: uri, user, password, batch_size
+    """
     exporters = {
         "parquet": ParquetExporter,
         "csv": CSVExporter,
         "geojson": GeoJSONExporter,
         "network": NetworkExporter,
+        "kafka": KafkaExporter,
+        "neo4j": Neo4jExporter,
     }
     
     if format_name not in exporters:
         raise ValueError(f"Unknown exporter format: {format_name}. Available: {list(exporters.keys())}")
     
-    return exporters[format_name](output_dir)
+    exporter_class = exporters[format_name]
+    return exporter_class(output_dir, **kwargs)

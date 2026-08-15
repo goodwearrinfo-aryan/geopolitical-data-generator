@@ -48,19 +48,20 @@ def cli(ctx: click.Context, config: Optional[str], verbose: bool):
 @cli.command()
 @click.option("--output", "-o", default="./output", help="Output directory")
 @click.option("--format", "-f", multiple=True, 
-              type=click.Choice(["parquet", "csv", "geojson", "network"]),
+              type=click.Choice(["parquet", "csv", "geojson", "network", "kafka", "neo4j"]),
               default=["parquet"], help="Export formats")
 @click.option("--timesteps", "-t", type=int, help="Number of timesteps to run")
 @click.option("--seed", "-s", type=int, help="Random seed")
+@click.option("--stream", is_flag=True, help="Enable streaming to Kafka/Neo4j")
 @click.pass_context
-def run(ctx: click.Context, output: str, format: tuple, timesteps: Optional[int], seed: Optional[int]):
+def run(ctx: click.Context, output: str, format: tuple, timesteps: Optional[int], seed: Optional[int], stream: bool):
     """Run a single simulation."""
     config = ctx.obj["config"]
     
     if seed is not None:
         config.seed = seed
     
-    logger.info("Starting simulation", seed=config.seed, timesteps=timesteps)
+    logger.info("Starting simulation", seed=config.seed, timesteps=timesteps, stream=stream)
     
     # Initialize simulation
     state = _initialize_simulation(config)
@@ -68,6 +69,25 @@ def run(ctx: click.Context, output: str, format: tuple, timesteps: Optional[int]
     causal = CausalEngine(temporal.rng, config.__dict__)
     spatial = SpatialEngine(config.__dict__)
     conflict_dynamics = ConflictDynamics(temporal.rng, config.__dict__)
+    
+    # Initialize streaming exporters if enabled
+    kafka_exporter = None
+    neo4j_exporter = None
+    
+    if stream:
+        if "kafka" in format or config.kafka_enabled:
+            kafka_exporter = get_exporter(
+                "kafka", output,
+                bootstrap_servers=config.kafka_bootstrap,
+                topic_prefix=config.kafka_topic_prefix,
+            )
+        if "neo4j" in format or config.neo4j_enabled:
+            neo4j_exporter = get_exporter(
+                "neo4j", output,
+                uri=config.neo4j_uri,
+                user=config.neo4j_user,
+                password=config.neo4j_password,
+            )
     
     # Run simulation
     max_timesteps = timesteps or temporal.total_timesteps
@@ -102,10 +122,26 @@ def run(ctx: click.Context, output: str, format: tuple, timesteps: Optional[int]
             if step % 12 == 0:  # Annual
                 _export_state(state, output, format)
             
+            # Stream to Kafka/Neo4j
+            if stream:
+                if kafka_exporter:
+                    kafka_exporter.export(state)
+                if neo4j_exporter:
+                    neo4j_exporter.export(state)
+            
             bar.update(1)
     
     # Final export
     _export_state(state, output, format)
+    
+    # Final stream
+    if stream:
+        if kafka_exporter:
+            kafka_exporter.export(state)
+            kafka_exporter.flush()
+        if neo4j_exporter:
+            neo4j_exporter.export(state)
+            neo4j_exporter.close()
     
     logger.info("Simulation complete", timestep=state.timestep, 
                 countries=len(state.countries), conflicts=len(state.conflicts))
