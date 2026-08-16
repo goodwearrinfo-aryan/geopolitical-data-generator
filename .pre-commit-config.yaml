@@ -1,0 +1,48 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff-check
+        entry: ruff
+        args: [--select=E,F,W --show-source, --fix]
+        stages: [manual]
+
+  - repo: local
+    hooks:
+      - id: ruff-format-check
+        name: ruff-format-check
+        entry: ruff
+        args: [--check, --format]
+        stages: [manual]
+
+  - repo: https://github.com/pre-commit/mirrors-bandit
+    rev: 1.7.8
+    hooks:
+      - id: bandit
+        args: [-r, engine/, tasks/]
+
+  - repo: local
+    hooks:
+      - id: pytest-benchmark
+        name: pytest-benchmark
+        entry: pytest
+        language: system
+        pass_filenames: false
+        args: [tests/benchmarks/, '--benchmark-only', '--tb=short']
+        stages: [manual]
+
+  - repo: local
+    hooks:
+      - id: mypy-check
+        name: mypy-check
+        entry: python3 -m mypy --config-file mypy.ini api/ engine/ tasks/ calibration/
+        language: system
+        pass_filenames: false
+        stages: [manual]

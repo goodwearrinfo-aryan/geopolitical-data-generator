@@ -1,0 +1,35 @@
+site_name: Geopolitical Data Generator API
+nav:
+  - Home: index.md
+  - API: api_reference.md
+  - Scenarios: scenarios.md
+  - Jobs: jobs.md
+  - Exports: exports.md
+  - Calibration: calibration.md
+  - Counterfactuals: counterfactuals.md
+  - Tutorials:
+    - introduction: tutorials/introduction.ipynb
+    - calibration: tutorials/calibration.ipynb
+    - dag: tutorials/dag.ipynb
+    - agents: tutorials/agents.ipynb
+    - exports: tutorials/exports.ipynb
+    - counterfactuals: tutorials/counterfactuals.md
+
+theme:
+  name: readthedark
+  palette:
+    primary: teal
+    accent: lime
+
+plugins:
+  - mkdocstrings
+  - search
+
+markdown_extensions:
+  - pymdownx.superfences:
+      class_list: 
+        - plantuml
+  - pymdownx.highlight:
+      anchor_linenums: true
+
+docstring_style: google

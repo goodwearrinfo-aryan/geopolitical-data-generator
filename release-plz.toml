@@ -1,0 +1,59 @@
+# release-plz.toml - CalVer release automation for geopolitical-data-generator
+
+# CalVer format: YYYY.MM.PATCH
+# e.g., 2024.08.1 for first release in August 2024
+
+[build]
+# Build command (e.g., hatch build, poetry build, or custom script)
+# build_command = "python -m build"
+
+[release]
+# GitHub repository
+repository = "aryanagarwal/geopolitical-data-generator"
+
+# Tag pattern
+tag_pattern = "v{version}"
+
+# Release body template (Go template syntax)
+release_body = "Release {version} – {{now \"2006-01-02\"}}"
+
+# Prerelease policy
+prerelease = false
+
+# CalVer versioning
+calver = true
+# Format: YYYY.MM.PATCH
+version_format = "2006.01.02"
+
+[provenance]
+# GPG signing
+gpg_sign = true
+
+# Cosign signing for containers
+cosign_sign = false
+
+[github]
+# Create draft release
+draft = false
+
+# Prerelease by default
+prerelease_by_default = false
+
+# Reviewers (empty = none)
+reviewers = []
+
+# Assignees (empty = none)
+assignees = []
+
+# Labels
+labels = ["release"]
+
+# Base branch for PRs
+base_branch = "master"
+
+[http]
+# Timeout in seconds
+timeout = 60
+
+# Retry count
+retries = 3

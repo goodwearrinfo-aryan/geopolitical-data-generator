@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geopolitical-data-generator"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pymc>=5.0",
+    "arviz>=1.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "pyarrow>=15.0.0",
+    "pyyaml>=6.0.1",
+]
+
+[project.optional-dependencies]
+ray = ["ray>=2.0"]
+sqlalchemy = ["sqlalchemy>=2.0"]
+plotly = ["plotly>=5.0"]
+
+[tool.setuptools.packages.find]
+where = ["."
+]
+
+# Ray parallel execution support
+# Usage: ray.init(ignore_reinit_error=True, num_cpus=4)
+# Distributed scenarios: ray.get([run_scenario.remote(s) for s in scenarios])

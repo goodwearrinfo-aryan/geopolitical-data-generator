@@ -1,0 +1,6 @@
+apiVersion: v2
+name: geopolitical-data-generator
+description: Geopolitical Data Generator Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
